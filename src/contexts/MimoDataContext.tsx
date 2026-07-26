@@ -10,7 +10,7 @@ import type {
   MimoUser,
 } from "@/types/mimo";
 
-interface MimoSalonRow {
+export interface MimoSalonRow {
   id: string;
   name: string;
   address: string;
@@ -21,6 +21,7 @@ interface MimoSalonRow {
   photos: string[] | null;
   services: unknown;
   rating: number;
+  manager_id: string | null;
 }
 
 interface MimoUserRow {
@@ -30,7 +31,7 @@ interface MimoUserRow {
   favorites: string[] | null;
 }
 
-interface MimoReservationRow {
+export interface MimoReservationRow {
   reservation_id: string;
   user_id: string;
   salon_id: string;
@@ -43,7 +44,7 @@ interface MimoReservationRow {
   created_at: string;
 }
 
-function mapSalonRow(row: MimoSalonRow): MimoSalon {
+export function mapSalonRow(row: MimoSalonRow): MimoSalon {
   return {
     id: row.id,
     name: row.name,
@@ -55,6 +56,7 @@ function mapSalonRow(row: MimoSalonRow): MimoSalon {
     photos: row.photos ?? [],
     services: (row.services as MimoService[] | null) ?? [],
     rating: Number(row.rating),
+    managerId: row.manager_id,
   };
 }
 
@@ -67,7 +69,7 @@ function mapUserRow(row: MimoUserRow): MimoUser {
   };
 }
 
-function mapReservationRow(row: MimoReservationRow): MimoReservation {
+export function mapReservationRow(row: MimoReservationRow): MimoReservation {
   return {
     reservationId: row.reservation_id,
     userId: row.user_id,
@@ -112,6 +114,7 @@ interface MimoDataContextValue {
   cancelReservation: (reservationId: string) => Promise<void>;
   getSalonById: (salonId: string) => MimoSalon | undefined;
   refreshReservations: () => Promise<void>;
+  refreshSalons: () => Promise<void>;
 }
 
 const MimoDataContext = createContext<MimoDataContextValue | undefined>(undefined);
@@ -314,6 +317,7 @@ export function MimoDataProvider({ children }: { children: ReactNode }) {
     cancelReservation,
     getSalonById,
     refreshReservations,
+    refreshSalons: fetchSalons,
   };
 
   return <MimoDataContext.Provider value={value}>{children}</MimoDataContext.Provider>;

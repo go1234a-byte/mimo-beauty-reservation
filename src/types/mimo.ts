@@ -15,6 +15,8 @@ export interface MimoSalon {
   photos: string[];
   services: MimoService[];
   rating: number;
+  /** 이 매장을 관리하는 매장 관리자 계정(Supabase Auth user id). 아직 관리자가 연결되지 않은 매장은 null. */
+  managerId?: string | null;
 }
 
 export type MimoAuthProvider = "apple" | "google" | "kakao";

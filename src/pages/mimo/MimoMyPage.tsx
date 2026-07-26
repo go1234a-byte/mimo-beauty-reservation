@@ -75,6 +75,12 @@ export default function MimoMyPage() {
         )}
       </div>
 
+      <div className="px-6 pt-8 text-center">
+        <Link to="/mimo/manager/login" className="text-xs text-muted-foreground underline">
+          매장 사장님이신가요? 사장님 모드로 로그인
+        </Link>
+      </div>
+
       <AuthGateModal open={authOpen} onOpenChange={setAuthOpen} />
       <MimoBottomNav />
     </div>

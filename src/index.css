@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* MIMO — premium beauty reservation coral theme (기본값으로 승격) */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 20%;
+
+    --primary: 0 100% 71%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 6 100% 78%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 0 100% 71%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 26 40% 14%;
+
+    --success: 152 60% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 100% 71%;
+
+    --radius: 1rem;
+
+    --gradient-mimo: linear-gradient(135deg, hsl(0 100% 71%) 0%, hsl(6 100% 78%) 100%);
+    --shadow-mimo: 0 10px 30px -8px hsl(0 0% 0% / 0.12);
+    --shadow-mimo-sm: 0 4px 12px -4px hsl(0 0% 0% / 0.08);
+  }
+}
+
+/* MimoRootLayout이 최상위에 mimo-theme 클래스를 부여하므로, 동일 값을 여기서도 보장한다 */
+.mimo-theme {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 20%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 20%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 20%;
+
+  --primary: 0 100% 71%;
+  --primary-foreground: 0 0% 100%;
+  --primary-glow: 6 100% 78%;
+
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 20%;
+
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 45%;
+
+  --accent: 0 100% 71%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+
+  --warning: 38 92% 50%;
+  --warning-foreground: 26 40% 14%;
+
+  --success: 152 60% 36%;
+  --success-foreground: 0 0% 100%;
+
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 0 100% 71%;
+
+  --radius: 1rem;
+
+  --gradient-mimo: linear-gradient(135deg, hsl(0 100% 71%) 0%, hsl(6 100% 78%) 100%);
+  --shadow-mimo: 0 10px 30px -8px hsl(0 0% 0% / 0.12);
+  --shadow-mimo-sm: 0 4px 12px -4px hsl(0 0% 0% / 0.08);
+
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  }
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}

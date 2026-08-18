@@ -17,6 +17,8 @@ const MerchantRootLayout = lazy(() =>
   import("./components/merchant/MerchantRootLayout").then((m) => ({ default: m.MerchantRootLayout })),
 );
 const MerchantHome = lazy(() => import("./pages/merchant/MerchantHome"));
+const MerchantSalonEdit = lazy(() => import("./pages/merchant/MerchantSalonEdit"));
+const MerchantSalonApply = lazy(() => import("./pages/merchant/MerchantSalonApply"));
 
 const AdminRootLayout = lazy(() =>
   import("./components/admin/AdminRootLayout").then((m) => ({ default: m.AdminRootLayout })),
@@ -57,7 +59,11 @@ export const routers = [
     // 사장님(merchant) 앱 — ON/OFF와 들어온 예약만 다루는 별도의 가벼운 화면
     path: "/merchant",
     element: withSuspense(<MerchantRootLayout />),
-    children: [{ index: true, element: withSuspense(<MerchantHome />) }],
+    children: [
+      { index: true, element: withSuspense(<MerchantHome />) },
+      { path: "edit", element: withSuspense(<MerchantSalonEdit />) },
+      { path: "apply/:salonId", element: withSuspense(<MerchantSalonApply />) },
+    ],
   },
   {
     // 운영자용 관리 대시보드

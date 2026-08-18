@@ -25,6 +25,10 @@ interface MimoSalonRow {
   rating: number;
   owner_uid?: string | null;
   approval_status?: string | null;
+  business_reg_url?: string | null;
+  bankbook_url?: string | null;
+  id_card_url?: string | null;
+  tax_invoice_agreed?: boolean | null;
 }
 
 interface MimoUserRow {
@@ -81,6 +85,10 @@ function mapSalonRow(row: MimoSalonRow): MimoSalon {
     rating: Number(row.rating),
     ownerUid: row.owner_uid ?? null,
     approvalStatus: (row.approval_status as MimoSalonApprovalStatus | null) ?? "approved",
+    businessRegUrl: row.business_reg_url ?? null,
+    bankbookUrl: row.bankbook_url ?? null,
+    idCardUrl: row.id_card_url ?? null,
+    taxInvoiceAgreed: row.tax_invoice_agreed ?? false,
   };
 }
 

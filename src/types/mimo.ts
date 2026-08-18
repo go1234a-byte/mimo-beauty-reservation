@@ -20,9 +20,11 @@ export interface MimoSalon {
   rating: number;
   ownerUid: string | null;
   approvalStatus: MimoSalonApprovalStatus;
+  businessRegUrl: string | null;
+  bankbookUrl: string | null;
+  idCardUrl: string | null;
+  taxInvoiceAgreed: boolean;
 }
-
-export type MimoAuthProvider = "apple" | "google" | "kakao";
 
 export interface MimoUser {
   uid: string;

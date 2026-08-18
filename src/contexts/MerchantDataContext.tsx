@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { getOrCreateMimoUid } from "@/lib/mimoSession";
+import { signUpWithEmail, signInWithEmail, signOutMimo, ensureMimoProfile } from "@/lib/mimoAuth";
 import { insertMimoNotification } from "@/lib/mimoNotifications";
 import type { MimoReservation, MimoReservationStatus, MimoSalon, MimoService } from "@/types/mimo";
 
@@ -18,6 +19,10 @@ interface MimoSalonRow {
   rating: number;
   owner_uid?: string | null;
   approval_status?: string | null;
+  business_reg_url?: string | null;
+  bankbook_url?: string | null;
+  id_card_url?: string | null;
+  tax_invoice_agreed?: boolean | null;
 }
 
 interface MimoReservationRow {
@@ -48,6 +53,10 @@ function mapSalonRow(row: MimoSalonRow): MimoSalon {
     rating: Number(row.rating),
     ownerUid: row.owner_uid ?? null,
     approvalStatus: (row.approval_status as MimoSalon["approvalStatus"] | null) ?? "approved",
+    businessRegUrl: row.business_reg_url ?? null,
+    bankbookUrl: row.bankbook_url ?? null,
+    idCardUrl: row.id_card_url ?? null,
+    taxInvoiceAgreed: row.tax_invoice_agreed ?? false,
   };
 }
 
@@ -69,21 +78,33 @@ function mapReservationRow(row: MimoReservationRow): MimoReservation {
 const POLL_INTERVAL_MS = 12000;
 
 interface MerchantDataContextValue {
-  merchantUid: string;
+  merchantUid: string | null;
   mySalons: MimoSalon[];
   claimableSalons: MimoSalon[];
   incomingReservations: MimoReservation[];
   loading: boolean;
   refresh: () => Promise<void>;
-  claimSalon: (salonId: string) => Promise<void>;
+  signUpEmail: (
+    email: string,
+    password: string,
+    name: string,
+  ) => Promise<{ ok: boolean; needsEmailConfirm?: boolean; error?: string }>;
+  signInEmail: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  submitMerchantApplication: (
+    salonId: string,
+    docs: { businessRegUrl: string; bankbookUrl: string; idCardUrl: string },
+  ) => Promise<boolean>;
   toggleSalonStatus: (salonId: string, next: boolean) => Promise<void>;
   completeReservation: (reservationId: string, salonId: string) => Promise<void>;
+  updateSalonInfo: (salonId: string, patch: Partial<MimoSalon>) => Promise<boolean>;
 }
 
 const MerchantDataContext = createContext<MerchantDataContextValue | undefined>(undefined);
 
 export function MerchantDataProvider({ children }: { children: ReactNode }) {
-  const merchantUid = useMemo(() => getOrCreateMimoUid(), []);
+  const [session, setSession] = useState<Session | null>(null);
+  const merchantUid = session?.user?.id ?? null;
   const [allSalons, setAllSalons] = useState<MimoSalon[]>([]);
   const [incomingReservations, setIncomingReservations] = useState<MimoReservation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,12 +140,22 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
   }, [fetchSalons]);
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await fetchSalons();
-      setLoading(false);
-    })();
+    setLoading(true);
+    fetchSalons().finally(() => setLoading(false));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (newSession) ensureMimoProfile(newSession);
+    });
+
+    return () => subscription.unsubscribe();
   }, [fetchSalons]);
+
+  const logout = useCallback(async () => {
+    await signOutMimo();
+  }, []);
 
   useEffect(() => {
     const salonIds = mySalons.map((s) => s.id);
@@ -134,12 +165,39 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mySalons.map((s) => s.id).join(","), fetchIncomingReservations]);
 
-  const claimSalon = useCallback(
-    async (salonId: string) => {
-      const { error } = await supabase.from("mimo_salons").update({ owner_uid: merchantUid }).eq("id", salonId);
-      if (!error) {
-        setAllSalons((prev) => prev.map((s) => (s.id === salonId ? { ...s, ownerUid: merchantUid } : s)));
-      }
+  // 사업자등록증/통장사본/신분증 + 세금계산서 발행 동의를 전부 제출해야 매장을 가져갈 수 있다.
+  // 제출 즉시 승인되는 게 아니라 approval_status를 pending으로 돌려 관리자 심사를 거치게 한다.
+  const submitMerchantApplication = useCallback(
+    async (salonId: string, docs: { businessRegUrl: string; bankbookUrl: string; idCardUrl: string }) => {
+      if (!merchantUid) return false;
+      const { error } = await supabase
+        .from("mimo_salons")
+        .update({
+          owner_uid: merchantUid,
+          business_reg_url: docs.businessRegUrl,
+          bankbook_url: docs.bankbookUrl,
+          id_card_url: docs.idCardUrl,
+          tax_invoice_agreed: true,
+          approval_status: "pending",
+        })
+        .eq("id", salonId);
+      if (error) return false;
+      setAllSalons((prev) =>
+        prev.map((s) =>
+          s.id === salonId
+            ? {
+                ...s,
+                ownerUid: merchantUid,
+                businessRegUrl: docs.businessRegUrl,
+                bankbookUrl: docs.bankbookUrl,
+                idCardUrl: docs.idCardUrl,
+                taxInvoiceAgreed: true,
+                approvalStatus: "pending",
+              }
+            : s,
+        ),
+      );
+      return true;
     },
     [merchantUid],
   );
@@ -183,6 +241,21 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updateSalonInfo = useCallback(async (salonId: string, patch: Partial<MimoSalon>) => {
+    const row: Record<string, unknown> = {};
+    if (patch.name !== undefined) row.name = patch.name;
+    if (patch.address !== undefined) row.address = patch.address;
+    if (patch.phone !== undefined) row.phone = patch.phone;
+    if (patch.categories !== undefined) row.categories = patch.categories;
+    if (patch.photos !== undefined) row.photos = patch.photos;
+    if (patch.services !== undefined) row.services = patch.services;
+
+    const { error } = await supabase.from("mimo_salons").update(row).eq("id", salonId);
+    if (error) return false;
+    setAllSalons((prev) => prev.map((s) => (s.id === salonId ? { ...s, ...patch } : s)));
+    return true;
+  }, []);
+
   const value: MerchantDataContextValue = {
     merchantUid,
     mySalons,
@@ -190,9 +263,13 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     incomingReservations,
     loading,
     refresh,
-    claimSalon,
+    signUpEmail: signUpWithEmail,
+    signInEmail: signInWithEmail,
+    logout,
+    submitMerchantApplication,
     toggleSalonStatus,
     completeReservation,
+    updateSalonInfo,
   };
 
   return <MerchantDataContext.Provider value={value}>{children}</MerchantDataContext.Provider>;

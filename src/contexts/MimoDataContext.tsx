@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { getOrCreateMimoUid, isMimoLoggedIn, setMimoLoggedIn } from "@/lib/mimoSession";
+import { signUpWithEmail, signInWithEmail, signOutMimo, ensureMimoProfile } from "@/lib/mimoAuth";
 import { insertMimoNotification, mapNotificationRow } from "@/lib/mimoNotifications";
 import type {
-  MimoAuthProvider,
   MimoNotification,
   MimoReservation,
   MimoReservationStatus,
@@ -93,12 +93,6 @@ function mapReservationRow(row: MimoReservationRow): MimoReservation {
   };
 }
 
-const PROVIDER_LABEL: Record<MimoAuthProvider, string> = {
-  apple: "Apple 사용자",
-  google: "Google 사용자",
-  kakao: "카카오 사용자",
-};
-
 interface CreateReservationInput {
   salonId: string;
   serviceName: string;
@@ -115,8 +109,13 @@ interface MimoDataContextValue {
   hasActiveReservation: boolean;
   notifications: MimoNotification[];
   unreadNotificationCount: number;
-  loginWithProvider: (provider: MimoAuthProvider) => Promise<void>;
-  logout: () => void;
+  signUpEmail: (
+    email: string,
+    password: string,
+    name: string,
+  ) => Promise<{ ok: boolean; needsEmailConfirm?: boolean; error?: string }>;
+  signInEmail: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => Promise<void>;
   toggleFavorite: (salonId: string) => Promise<void>;
   isFavorite: (salonId: string) => boolean;
   isSlotTaken: (salonId: string, startTime: string) => boolean;
@@ -138,8 +137,7 @@ export function MimoDataProvider({ children }: { children: ReactNode }) {
   const [reservations, setReservations] = useState<MimoReservation[]>([]);
   const [allReservations, setAllReservations] = useState<MimoReservation[]>([]);
   const [notifications, setNotifications] = useState<MimoNotification[]>([]);
-
-  const uid = useMemo(() => getOrCreateMimoUid(), []);
+  const [session, setSession] = useState<Session | null>(null);
 
   const fetchSalons = useCallback(async () => {
     const { data, error } = await supabase.from("mimo_salons").select("*");
@@ -191,21 +189,35 @@ export function MimoDataProvider({ children }: { children: ReactNode }) {
     // 마이그레이션 전이라 테이블이 없어도(error) 조용히 빈 목록을 유지한다.
   }, []);
 
+  // 첫 로그인 시 mimo_users 프로필 행이 없으면 만들어준다 (이름은 회원가입 때 넘긴 메타데이터에서 가져옴).
+  const ensureProfile = useCallback(
+    async (activeSession: Session) => {
+      const userId = activeSession.user.id;
+      await ensureMimoProfile(activeSession);
+      await Promise.all([fetchUser(userId), fetchUserReservations(userId), fetchNotifications(userId)]);
+    },
+    [fetchUser, fetchUserReservations, fetchNotifications],
+  );
+
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await Promise.all([fetchSalons(), fetchAllReservations()]);
-      if (isMimoLoggedIn()) {
-        const found = await fetchUser(uid);
-        if (found) {
-          await Promise.all([fetchUserReservations(uid), fetchNotifications(uid)]);
-        } else {
-          setMimoLoggedIn(false);
-        }
+    setLoading(true);
+    Promise.all([fetchSalons(), fetchAllReservations()]).finally(() => setLoading(false));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (newSession) {
+        ensureProfile(newSession);
+      } else {
+        setCurrentUser(null);
+        setReservations([]);
+        setNotifications([]);
       }
-      setLoading(false);
-    })();
-  }, [fetchSalons, fetchAllReservations, fetchUser, fetchUserReservations, fetchNotifications, uid]);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchSalons, fetchAllReservations, ensureProfile]);
 
   // 실시간 동기화: 다른 사용자의 결제 확정이나 사장님의 ON/OFF 전환이 새로고침 없이
   // 바로 반영되도록 mimo_salons 테이블 변경을 구독한다. Realtime이 비활성화된 프로젝트에서도
@@ -252,32 +264,8 @@ export function MimoDataProvider({ children }: { children: ReactNode }) {
     [notifications],
   );
 
-  const loginWithProvider = useCallback(
-    async (provider: MimoAuthProvider) => {
-      const name = PROVIDER_LABEL[provider];
-      const { data, error } = await supabase
-        .from("mimo_users")
-        .upsert({ uid, name, favorites: [] }, { onConflict: "uid", ignoreDuplicates: true })
-        .select()
-        .maybeSingle();
-      if (!error) {
-        setMimoLoggedIn(true);
-        if (data) {
-          setCurrentUser(mapUserRow(data as MimoUserRow));
-        } else {
-          await fetchUser(uid);
-        }
-        await Promise.all([fetchUserReservations(uid), fetchNotifications(uid)]);
-      }
-    },
-    [uid, fetchUser, fetchUserReservations, fetchNotifications],
-  );
-
-  const logout = useCallback(() => {
-    setMimoLoggedIn(false);
-    setCurrentUser(null);
-    setReservations([]);
-    setNotifications([]);
+  const logout = useCallback(async () => {
+    await signOutMimo();
   }, []);
 
   const isFavorite = useCallback(
@@ -438,7 +426,8 @@ export function MimoDataProvider({ children }: { children: ReactNode }) {
     hasActiveReservation,
     notifications,
     unreadNotificationCount,
-    loginWithProvider,
+    signUpEmail: signUpWithEmail,
+    signInEmail: signInWithEmail,
     logout,
     toggleFavorite,
     isFavorite,

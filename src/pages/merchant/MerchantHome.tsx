@@ -1,13 +1,25 @@
-import { Store, CalendarClock } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, Store, CalendarClock, Pencil, Clock, XCircle, LogOut } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusToggle } from "@/components/merchant/StatusToggle";
+import { EmailAuthForm } from "@/components/mimo/auth/EmailAuthForm";
 import { useMerchantData } from "@/contexts/MerchantDataContext";
 
 export default function MerchantHome() {
-  const { mySalons, claimableSalons, incomingReservations, loading, claimSalon, toggleSalonStatus, completeReservation } =
-    useMerchantData();
+  const {
+    merchantUid,
+    mySalons,
+    claimableSalons,
+    incomingReservations,
+    loading,
+    signUpEmail,
+    signInEmail,
+    logout,
+    toggleSalonStatus,
+    completeReservation,
+  } = useMerchantData();
 
   if (loading) {
     return (
@@ -17,17 +29,37 @@ export default function MerchantHome() {
     );
   }
 
+  if (!merchantUid) {
+    return (
+      <div className="min-h-full bg-background pb-10">
+        <header className="flex items-center gap-2 px-6 pt-6">
+          <Link to="/mimo" className="rounded-full p-1 text-foreground hover:bg-muted" aria-label="뒤로가기">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <span className="text-lg font-bold tracking-tight text-foreground">MIMO 사장님</span>
+        </header>
+        <div className="space-y-4 px-6 pt-6">
+          <p className="text-xs text-muted-foreground">사장님 계정으로 로그인하면 매장을 등록/관리할 수 있어요.</p>
+          <EmailAuthForm signUpEmail={signUpEmail} signInEmail={signInEmail} onSuccess={() => {}} />
+        </div>
+      </div>
+    );
+  }
+
   if (mySalons.length === 0) {
     return (
       <div className="min-h-full bg-background pb-10">
-        <header className="px-6 pt-6">
+        <header className="flex items-center gap-2 px-6 pt-6">
+          <Link to="/mimo" className="rounded-full p-1 text-foreground hover:bg-muted" aria-label="뒤로가기">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
           <span className="text-lg font-bold tracking-tight text-foreground">MIMO 사장님</span>
         </header>
         <div className="space-y-3 px-6 pt-6">
           <h1 className="text-base font-bold text-foreground">등록할 매장을 선택해주세요</h1>
           <p className="text-xs text-muted-foreground">
-            MVP 데모: 실제 서비스에서는 사업자 인증 후 매장을 등록합니다. 지금은 소유자가 없는 매장을 선택해
-            사장님 계정에 연결할 수 있어요.
+            사업자등록증·통장사본·신분증 사본 제출과 세금계산서 발행 의무 동의가 필요해요. 제출 후 관리자
+            심사를 거쳐야 매장이 노출됩니다.
           </p>
           {claimableSalons.length === 0 && (
             <p className="py-10 text-center text-sm text-muted-foreground">등록 가능한 매장이 없습니다.</p>
@@ -39,9 +71,11 @@ export default function MerchantHome() {
                   <p className="text-sm font-semibold text-foreground">{salon.name}</p>
                   <p className="text-xs text-muted-foreground">{salon.address}</p>
                 </div>
-                <Button size="sm" className="rounded-full" onClick={() => claimSalon(salon.id)}>
-                  등록하기
-                </Button>
+                <Link to={`/merchant/apply/${salon.id}`}>
+                  <Button size="sm" className="rounded-full">
+                    등록하기
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           ))}
@@ -52,17 +86,73 @@ export default function MerchantHome() {
 
   const salon = mySalons[0];
 
+  if (salon.approvalStatus === "pending") {
+    return (
+      <div className="min-h-full bg-background pb-10">
+        <header className="flex items-center gap-2 px-6 pt-6">
+          <Link to="/mimo" className="rounded-full p-1 text-foreground hover:bg-muted" aria-label="뒤로가기">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <span className="text-lg font-bold tracking-tight text-foreground">MIMO 사장님</span>
+        </header>
+        <div className="flex flex-col items-center gap-3 px-6 pt-24 text-center">
+          <Clock className="h-10 w-10 text-muted-foreground" />
+          <h1 className="text-base font-bold text-foreground">서류 심사중입니다</h1>
+          <p className="text-xs text-muted-foreground">
+            {salon.name} 제출 서류를 관리자가 검토하고 있어요. 승인되면 매장이 바로 노출됩니다.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (salon.approvalStatus === "rejected") {
+    return (
+      <div className="min-h-full bg-background pb-10">
+        <header className="flex items-center gap-2 px-6 pt-6">
+          <Link to="/mimo" className="rounded-full p-1 text-foreground hover:bg-muted" aria-label="뒤로가기">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <span className="text-lg font-bold tracking-tight text-foreground">MIMO 사장님</span>
+        </header>
+        <div className="flex flex-col items-center gap-3 px-6 pt-24 text-center">
+          <XCircle className="h-10 w-10 text-destructive" />
+          <h1 className="text-base font-bold text-foreground">심사가 반려됐습니다</h1>
+          <p className="text-xs text-muted-foreground">{salon.name} 등록 서류를 다시 확인 후 1:1 문의로 연락해주세요.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-full bg-background pb-10">
       <header className="flex items-center justify-between px-6 pt-6">
-        <span className="text-lg font-bold tracking-tight text-foreground">MIMO 사장님</span>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Store className="h-3.5 w-3.5" />
-          {salon.name}
-        </span>
+        <div className="flex items-center gap-2">
+          <Link to="/mimo" className="rounded-full p-1 text-foreground hover:bg-muted" aria-label="뒤로가기">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <span className="text-lg font-bold tracking-tight text-foreground">MIMO 사장님</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Store className="h-3.5 w-3.5" />
+            {salon.name}
+          </span>
+          <button type="button" onClick={logout} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="로그아웃">
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
       </header>
 
       <div className="space-y-6 px-6 pt-6">
+        <div className="flex justify-end">
+          <Link to="/merchant/edit">
+            <Button size="sm" variant="outline" className="gap-1.5 rounded-full">
+              <Pencil className="h-3.5 w-3.5" />
+              매장 정보 수정
+            </Button>
+          </Link>
+        </div>
         <StatusToggle isOn={salon.status} onToggle={(next) => toggleSalonStatus(salon.id, next)} />
 
         <section className="space-y-3">

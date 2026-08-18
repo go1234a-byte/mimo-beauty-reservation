@@ -1,10 +1,44 @@
 import { useState } from "react";
-import { Store, CalendarClock, Users, Star, Flag } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, Store, CalendarClock, Users, Star, Flag, FileText, ExternalLink, LogOut } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminData } from "@/contexts/AdminDataContext";
+import { getMerchantDocSignedUrl } from "@/lib/mimoStorage";
+import { signOutMimo } from "@/lib/mimoAuth";
+
+const DOC_LABELS = [
+  { key: "businessRegUrl", label: "사업자등록증" },
+  { key: "bankbookUrl", label: "통장사본" },
+  { key: "idCardUrl", label: "신분증사본" },
+] as const;
+
+function DocLink({ label, path }: { label: string; path: string | null }) {
+  const [opening, setOpening] = useState(false);
+  if (!path) return null;
+
+  const handleOpen = async () => {
+    setOpening(true);
+    const url = await getMerchantDocSignedUrl(path);
+    setOpening(false);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleOpen}
+      disabled={opening}
+      className="flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground disabled:opacity-50"
+    >
+      <FileText className="h-3 w-3" />
+      {label}
+      <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
+    </button>
+  );
+}
 
 const TABS = [
   { id: "salons", label: "매장 승인", icon: Store },
@@ -23,8 +57,23 @@ export default function AdminHome() {
   return (
     <div className="min-h-full bg-background pb-16">
       <header className="px-6 pt-6">
-        <h1 className="text-lg font-bold text-foreground">MIMO 관리자</h1>
-        <p className="text-xs text-muted-foreground">매장 승인, 예약, 사용자, 리뷰, 신고를 관리합니다.</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Link to="/mimo" className="rounded-full p-1 text-foreground hover:bg-muted" aria-label="뒤로가기">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <h1 className="text-lg font-bold text-foreground">MIMO 관리자</h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => signOutMimo()}
+            className="rounded-full p-1 text-muted-foreground hover:bg-muted"
+            aria-label="로그아웃"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">매장 승인, 예약, 사용자, 리뷰, 신고를 관리합니다.</p>
       </header>
 
       <div className="mt-4 flex gap-1.5 overflow-x-auto px-6 pb-1">
@@ -65,6 +114,16 @@ export default function AdminHome() {
                   <p className="text-xs text-muted-foreground">
                     운영상태: {s.status ? "ON (지금 가능)" : "OFF"} · 소유자: {s.ownerUid ?? "미배정"}
                   </p>
+                  {s.ownerUid && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {DOC_LABELS.map(({ key, label }) => (
+                        <DocLink key={key} label={label} path={s[key]} />
+                      ))}
+                      <Badge className={s.taxInvoiceAgreed ? "bg-success/15 text-success" : "bg-destructive/10 text-destructive"}>
+                        세금계산서 동의 {s.taxInvoiceAgreed ? "O" : "X"}
+                      </Badge>
+                    </div>
+                  )}
                   {s.approvalStatus !== "approved" && (
                     <div className="flex gap-2 pt-1">
                       <Button size="sm" className="flex-1 rounded-xl" onClick={() => admin.approveSalon(s.id)}>

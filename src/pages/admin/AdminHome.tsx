@@ -9,6 +9,7 @@ import {
   Star,
   Flag,
   MessageCircleQuestion,
+  Receipt,
   FileText,
   ExternalLink,
   LogOut,
@@ -25,6 +26,7 @@ import { useAdminData } from "@/contexts/AdminDataContext";
 import { getMerchantDocSignedUrl } from "@/lib/mimoStorage";
 import { signOutMimo } from "@/lib/mimoAuth";
 import { AdminSalonEditSheet } from "@/components/admin/AdminSalonEditSheet";
+import { computeMonthlySettlements } from "@/lib/mimoSettlement";
 import type { MimoSalon } from "@/types/mimo";
 
 const DOC_LABELS = [
@@ -74,6 +76,7 @@ function SearchInput({ value, onChange, placeholder }: { value: string; onChange
 
 const TABS = [
   { id: "dashboard", label: "대시보드", icon: LayoutDashboard },
+  { id: "settlement", label: "정산", icon: Receipt },
   { id: "salons", label: "매장 승인", icon: Store },
   { id: "reservations", label: "예약", icon: CalendarClock },
   { id: "users", label: "사용자", icon: Users },
@@ -112,6 +115,8 @@ export default function AdminHome() {
     if (!q) return admin.users;
     return admin.users.filter((u) => u.name.toLowerCase().includes(q) || u.uid.toLowerCase().includes(q));
   }, [admin.users, userQuery]);
+
+  const settlements = useMemo(() => computeMonthlySettlements(admin.reservations), [admin.reservations]);
 
   const stats = useMemo(() => {
     const today = new Date().toDateString();
@@ -200,6 +205,40 @@ export default function AdminHome() {
             <StatCard label="미해결 신고" value={stats.openReports} warn={stats.openReports > 0} />
             <StatCard label="답변대기 문의" value={stats.openInquiries} warn={stats.openInquiries > 0} />
           </div>
+        )}
+
+        {!admin.loading && tab === "settlement" && (
+          <>
+            <div className="rounded-2xl bg-secondary p-4 text-xs leading-relaxed text-muted-foreground">
+              결제 완료된 예약금액의 <strong className="text-foreground">10%를 MIMO 수수료(공급가액)</strong>로
+              계산하고, 그 수수료에 <strong className="text-foreground">부가가치세 10%</strong>를 별도로 얹어
+              사장님께 청구·납부하는 방식으로 월별 정리합니다. (매입세액공제 없음 가정 — 실제 신고 시
+              매입세액이 있으면 납부액이 줄어들 수 있어요. 법인세·소득세 등 순이익 기준 세금은 별도 계산이
+              필요합니다.)
+            </div>
+            {settlements.length === 0 && <EmptyState label="정산할 결제 내역이 없습니다." />}
+            {settlements.map((s, i) => (
+              <Card key={s.month} className={cn("rounded-2xl", i === 0 ? "border-primary" : "border-border")}>
+                <CardContent className="space-y-2.5 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-foreground">{s.month}</p>
+                    {i === 0 && <Badge className="bg-primary/10 text-primary">이번 달</Badge>}
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <Row label={`예약 매출 (${s.reservationCount}건)`} value={`₩${s.totalRevenue.toLocaleString()}`} />
+                    <Row label="MIMO 수수료 (10%, 공급가액)" value={`₩${Math.round(s.commission).toLocaleString()}`} />
+                    <Row label="부가세 (수수료의 10%)" value={`₩${Math.round(s.vat).toLocaleString()}`} />
+                    <div className="h-px bg-border" />
+                    <Row
+                      label="청구·납부 합계 (수수료+부가세)"
+                      value={`₩${Math.round(s.totalBilled).toLocaleString()}`}
+                      bold
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </>
         )}
 
         {!admin.loading && tab === "salons" && (
@@ -423,6 +462,15 @@ export default function AdminHome() {
       </div>
 
       <AdminSalonEditSheet salon={editingSalon} onOpenChange={(open) => !open && setEditingSalon(null)} />
+    </div>
+  );
+}
+
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn(bold ? "font-bold text-foreground" : "font-medium text-foreground")}>{value}</span>
     </div>
   );
 }

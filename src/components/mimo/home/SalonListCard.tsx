@@ -12,7 +12,7 @@ interface SalonListCardProps {
   salon: MimoSalon;
   currentLocation: MimoCoordinates;
   selected?: boolean;
-  /** 카드를 탭하면 상세로 이동하지 않고 지도 핀만 강조한다 (Apple Maps 스타일) */
+  /** 카드를 탭하면 지도 핀도 같이 강조한다 */
   onSelect?: (salonId: string) => void;
 }
 
@@ -24,6 +24,11 @@ export function SalonListCard({ salon, currentLocation, selected, onSelect }: Sa
   // 단, 비회원은 상세 페이지에서 둘러볼 수 있어야 하므로 로그인된 사용자에게만 적용한다.
   const onlyService = salon.services.length === 1 ? salon.services[0] : null;
   const canQuickReserve = !!onlyService && !!currentUser;
+
+  const handleCardClick = () => {
+    onSelect?.(salon.id);
+    navigate(`/mimo/salon/${salon.id}`);
+  };
 
   const handleQuickReserve = () => {
     if (!onlyService) return;
@@ -43,7 +48,7 @@ export function SalonListCard({ salon, currentLocation, selected, onSelect }: Sa
         selected ? "border-primary ring-2 ring-primary/25" : "border-border",
       )}
     >
-      <button type="button" className="block w-full text-left" onClick={() => onSelect?.(salon.id)}>
+      <button type="button" className="block w-full text-left" onClick={handleCardClick}>
         <CardContent className="flex gap-3 p-3.5">
           <div className="min-w-0 flex-1 space-y-1.5">
             {/* "지금 가능"이 카드에서 가장 먼저 눈에 들어오는 요소여야 한다 */}

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { mapInquiryRow } from "@/lib/mimoInquiries";
 import type {
   MimoReport,
   MimoReservation,
@@ -8,6 +9,7 @@ import type {
   MimoSalon,
   MimoSalonApprovalStatus,
   MimoService,
+  MimoSupportInquiry,
   MimoUser,
 } from "@/types/mimo";
 
@@ -145,16 +147,19 @@ interface AdminDataContextValue {
   users: MimoUser[];
   reviews: MimoReview[];
   reports: MimoReport[];
+  inquiries: MimoSupportInquiry[];
   loading: boolean;
   refresh: () => Promise<void>;
   approveSalon: (salonId: string) => Promise<void>;
   rejectSalon: (salonId: string) => Promise<void>;
   forceOffSalon: (salonId: string) => Promise<void>;
   deleteSalon: (salonId: string) => Promise<void>;
+  updateSalonInfo: (salonId: string, patch: Partial<MimoSalon>) => Promise<boolean>;
   cancelReservation: (reservationId: string) => Promise<void>;
   toggleUserAdmin: (uid: string, next: boolean) => Promise<void>;
   deleteReview: (reviewId: string) => Promise<void>;
   resolveReport: (reportId: string) => Promise<void>;
+  replyToInquiry: (inquiryId: string, reply: string) => Promise<void>;
 }
 
 const AdminDataContext = createContext<AdminDataContextValue | undefined>(undefined);
@@ -165,24 +170,28 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<MimoUser[]>([]);
   const [reviews, setReviews] = useState<MimoReview[]>([]);
   const [reports, setReports] = useState<MimoReport[]>([]);
+  const [inquiries, setInquiries] = useState<MimoSupportInquiry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const [salonsRes, reservationsRes, usersRes, reviewsRes, reportsRes] = await Promise.all([
+    const [salonsRes, reservationsRes, usersRes, reviewsRes, reportsRes, inquiriesRes] = await Promise.all([
       supabase.from("mimo_salons").select("*"),
       supabase.from("mimo_reservations").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("mimo_users").select("*"),
       supabase.from("mimo_reviews").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("mimo_reports").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("mimo_support_inquiries").select("*").order("created_at", { ascending: false }).limit(100),
     ]);
 
     if (!salonsRes.error && salonsRes.data) setSalons(salonsRes.data.map((r) => mapSalonRow(r as MimoSalonRow)));
     if (!reservationsRes.error && reservationsRes.data)
       setReservations(reservationsRes.data.map((r) => mapReservationRow(r as MimoReservationRow)));
     if (!usersRes.error && usersRes.data) setUsers(usersRes.data.map((r) => mapUserRow(r as MimoUserRow)));
-    // 리뷰/신고 테이블은 마이그레이션 전이면 존재하지 않을 수 있어 실패해도 무시한다.
+    // 리뷰/신고/문의 테이블은 마이그레이션 전이면 존재하지 않을 수 있어 실패해도 무시한다.
     if (!reviewsRes.error && reviewsRes.data) setReviews(reviewsRes.data.map((r) => mapReviewRow(r as MimoReviewRow)));
     if (!reportsRes.error && reportsRes.data) setReports(reportsRes.data.map((r) => mapReportRow(r as MimoReportRow)));
+    if (!inquiriesRes.error && inquiriesRes.data)
+      setInquiries(inquiriesRes.data.map((r) => mapInquiryRow(r as Parameters<typeof mapInquiryRow>[0])));
   }, []);
 
   useEffect(() => {
@@ -236,6 +245,31 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     if (!error) setSalons((prev) => prev.filter((s) => s.id !== salonId));
   }, []);
 
+  const updateSalonInfo = useCallback(async (salonId: string, patch: Partial<MimoSalon>) => {
+    const row: Record<string, unknown> = {};
+    if (patch.name !== undefined) row.name = patch.name;
+    if (patch.address !== undefined) row.address = patch.address;
+    if (patch.phone !== undefined) row.phone = patch.phone;
+    if (patch.categories !== undefined) row.categories = patch.categories;
+    if (patch.services !== undefined) row.services = patch.services;
+
+    const { error } = await supabase.from("mimo_salons").update(row).eq("id", salonId);
+    if (error) return false;
+    setSalons((prev) => prev.map((s) => (s.id === salonId ? { ...s, ...patch } : s)));
+    return true;
+  }, []);
+
+  const replyToInquiry = useCallback(async (inquiryId: string, reply: string) => {
+    const { error } = await supabase
+      .from("mimo_support_inquiries")
+      .update({ admin_reply: reply, status: "answered", updated_at: new Date().toISOString() })
+      .eq("id", inquiryId);
+    if (!error)
+      setInquiries((prev) =>
+        prev.map((q) => (q.id === inquiryId ? { ...q, adminReply: reply, status: "answered" } : q)),
+      );
+  }, []);
+
   const deleteReview = useCallback(async (reviewId: string) => {
     const { error } = await supabase.from("mimo_reviews").delete().eq("id", reviewId);
     if (!error) setReviews((prev) => prev.filter((r) => r.id !== reviewId));
@@ -252,15 +286,18 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     users,
     reviews,
     reports,
+    inquiries,
     loading,
     refresh,
     approveSalon,
     rejectSalon,
     forceOffSalon,
     deleteSalon,
+    updateSalonInfo,
     cancelReservation,
     toggleUserAdmin,
     deleteReview,
+    replyToInquiry,
     resolveReport,
   };
 

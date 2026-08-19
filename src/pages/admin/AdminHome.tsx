@@ -1,13 +1,31 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Store, CalendarClock, Users, Star, Flag, FileText, ExternalLink, LogOut } from "lucide-react";
+import {
+  ArrowLeft,
+  LayoutDashboard,
+  Store,
+  CalendarClock,
+  Users,
+  Star,
+  Flag,
+  MessageCircleQuestion,
+  FileText,
+  ExternalLink,
+  LogOut,
+  Pencil,
+  Search,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useAdminData } from "@/contexts/AdminDataContext";
 import { getMerchantDocSignedUrl } from "@/lib/mimoStorage";
 import { signOutMimo } from "@/lib/mimoAuth";
+import { AdminSalonEditSheet } from "@/components/admin/AdminSalonEditSheet";
+import type { MimoSalon } from "@/types/mimo";
 
 const DOC_LABELS = [
   { key: "businessRegUrl", label: "사업자등록증" },
@@ -40,19 +58,78 @@ function DocLink({ label, path }: { label: string; path: string | null }) {
   );
 }
 
+function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-9 pl-9 text-xs"
+      />
+    </div>
+  );
+}
+
 const TABS = [
+  { id: "dashboard", label: "대시보드", icon: LayoutDashboard },
   { id: "salons", label: "매장 승인", icon: Store },
   { id: "reservations", label: "예약", icon: CalendarClock },
   { id: "users", label: "사용자", icon: Users },
   { id: "reviews", label: "리뷰", icon: Star },
   { id: "reports", label: "신고", icon: Flag },
+  { id: "inquiries", label: "문의", icon: MessageCircleQuestion },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 export default function AdminHome() {
-  const [tab, setTab] = useState<TabId>("salons");
+  const [tab, setTab] = useState<TabId>("dashboard");
   const admin = useAdminData();
+  const [salonQuery, setSalonQuery] = useState("");
+  const [reservationQuery, setReservationQuery] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [editingSalon, setEditingSalon] = useState<MimoSalon | null>(null);
+  const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
+
+  const filteredSalons = useMemo(() => {
+    const q = salonQuery.trim().toLowerCase();
+    if (!q) return admin.salons;
+    return admin.salons.filter((s) => s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q));
+  }, [admin.salons, salonQuery]);
+
+  const filteredReservations = useMemo(() => {
+    const q = reservationQuery.trim().toLowerCase();
+    if (!q) return admin.reservations;
+    return admin.reservations.filter(
+      (r) => r.serviceName.toLowerCase().includes(q) || r.salonId.toLowerCase().includes(q) || r.userId.toLowerCase().includes(q),
+    );
+  }, [admin.reservations, reservationQuery]);
+
+  const filteredUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return admin.users;
+    return admin.users.filter((u) => u.name.toLowerCase().includes(q) || u.uid.toLowerCase().includes(q));
+  }, [admin.users, userQuery]);
+
+  const stats = useMemo(() => {
+    const today = new Date().toDateString();
+    const todayReservations = admin.reservations.filter((r) => new Date(r.createdAt).toDateString() === today).length;
+    const revenue = admin.reservations.filter((r) => r.status === "completed").reduce((sum, r) => sum + r.price, 0);
+    return {
+      totalSalons: admin.salons.length,
+      pendingSalons: admin.salons.filter((s) => s.approvalStatus === "pending").length,
+      liveSalons: admin.salons.filter((s) => s.status && s.approvalStatus === "approved").length,
+      totalReservations: admin.reservations.length,
+      todayReservations,
+      revenue,
+      totalUsers: admin.users.length,
+      adminUsers: admin.users.filter((u) => u.isAdmin).length,
+      openReports: admin.reports.filter((r) => r.status === "open").length,
+      openInquiries: admin.inquiries.filter((q) => q.status === "open").length,
+    };
+  }, [admin]);
 
   return (
     <div className="min-h-full bg-background pb-16">
@@ -73,7 +150,7 @@ export default function AdminHome() {
             <LogOut className="h-4 w-4" />
           </button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">매장 승인, 예약, 사용자, 리뷰, 신고를 관리합니다.</p>
+        <p className="mt-1 text-xs text-muted-foreground">매장 승인, 예약, 사용자, 리뷰, 신고, 문의를 관리합니다.</p>
       </header>
 
       <div className="mt-4 flex gap-1.5 overflow-x-auto px-6 pb-1">
@@ -92,6 +169,16 @@ export default function AdminHome() {
             >
               <Icon className="h-3.5 w-3.5" />
               {t.label}
+              {t.id === "reports" && stats.openReports > 0 && (
+                <span className="rounded-full bg-destructive px-1.5 text-[10px] text-destructive-foreground">
+                  {stats.openReports}
+                </span>
+              )}
+              {t.id === "inquiries" && stats.openInquiries > 0 && (
+                <span className="rounded-full bg-destructive px-1.5 text-[10px] text-destructive-foreground">
+                  {stats.openInquiries}
+                </span>
+              )}
             </button>
           );
         })}
@@ -100,10 +187,26 @@ export default function AdminHome() {
       <div className="space-y-3 px-6 pt-4">
         {admin.loading && <p className="py-10 text-center text-sm text-muted-foreground">불러오는 중...</p>}
 
+        {!admin.loading && tab === "dashboard" && (
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard label="전체 매장" value={stats.totalSalons} />
+            <StatCard label="승인대기 매장" value={stats.pendingSalons} warn={stats.pendingSalons > 0} />
+            <StatCard label="지금 운영중" value={stats.liveSalons} />
+            <StatCard label="오늘 예약" value={stats.todayReservations} />
+            <StatCard label="전체 예약" value={stats.totalReservations} />
+            <StatCard label="완료 매출" value={`₩${stats.revenue.toLocaleString()}`} />
+            <StatCard label="가입자" value={stats.totalUsers} />
+            <StatCard label="관리자" value={stats.adminUsers} />
+            <StatCard label="미해결 신고" value={stats.openReports} warn={stats.openReports > 0} />
+            <StatCard label="답변대기 문의" value={stats.openInquiries} warn={stats.openInquiries > 0} />
+          </div>
+        )}
+
         {!admin.loading && tab === "salons" && (
           <>
-            {admin.salons.length === 0 && <EmptyState label="등록된 매장이 없습니다." />}
-            {admin.salons.map((s) => (
+            <SearchInput value={salonQuery} onChange={setSalonQuery} placeholder="매장명, 주소로 검색" />
+            {filteredSalons.length === 0 && <EmptyState label="검색 결과가 없습니다." />}
+            {filteredSalons.map((s) => (
               <Card key={s.id} className="rounded-2xl border-border">
                 <CardContent className="space-y-2 p-4">
                   <div className="flex items-center justify-between">
@@ -124,43 +227,38 @@ export default function AdminHome() {
                       </Badge>
                     </div>
                   )}
-                  {s.approvalStatus !== "approved" && (
-                    <div className="flex gap-2 pt-1">
-                      <Button size="sm" className="flex-1 rounded-xl" onClick={() => admin.approveSalon(s.id)}>
-                        승인
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 rounded-xl"
-                        onClick={() => admin.rejectSalon(s.id)}
-                      >
-                        거절
-                      </Button>
-                    </div>
-                  )}
-                  {s.approvalStatus === "approved" && (
-                    <div className="flex gap-2 pt-1">
-                      {s.status && (
+                  <div className="flex gap-2 pt-1">
+                    <Button size="sm" variant="outline" className="flex-1 rounded-xl" onClick={() => setEditingSalon(s)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                      정보 수정
+                    </Button>
+                    {s.approvalStatus !== "approved" ? (
+                      <>
+                        <Button size="sm" className="flex-1 rounded-xl" onClick={() => admin.approveSalon(s.id)}>
+                          승인
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1 rounded-xl" onClick={() => admin.rejectSalon(s.id)}>
+                          거절
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        {s.status && (
+                          <Button size="sm" variant="outline" className="flex-1 rounded-xl" onClick={() => admin.forceOffSalon(s.id)}>
+                            강제 OFF
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          className="flex-1 rounded-xl"
-                          onClick={() => admin.forceOffSalon(s.id)}
+                          className="flex-1 rounded-xl text-destructive"
+                          onClick={() => admin.deleteSalon(s.id)}
                         >
-                          강제 OFF
+                          매장 삭제
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 rounded-xl text-destructive"
-                        onClick={() => admin.deleteSalon(s.id)}
-                      >
-                        매장 삭제
-                      </Button>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -169,8 +267,9 @@ export default function AdminHome() {
 
         {!admin.loading && tab === "reservations" && (
           <>
-            {admin.reservations.length === 0 && <EmptyState label="예약 내역이 없습니다." />}
-            {admin.reservations.map((r) => (
+            <SearchInput value={reservationQuery} onChange={setReservationQuery} placeholder="서비스명, 매장/유저 id로 검색" />
+            {filteredReservations.length === 0 && <EmptyState label="검색 결과가 없습니다." />}
+            {filteredReservations.map((r) => (
               <Card key={r.reservationId} className="rounded-2xl border-border">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex items-center justify-between">
@@ -199,8 +298,9 @@ export default function AdminHome() {
 
         {!admin.loading && tab === "users" && (
           <>
-            {admin.users.length === 0 && <EmptyState label="가입한 사용자가 없습니다." />}
-            {admin.users.map((u) => (
+            <SearchInput value={userQuery} onChange={setUserQuery} placeholder="이름, uid로 검색" />
+            {filteredUsers.length === 0 && <EmptyState label="검색 결과가 없습니다." />}
+            {filteredUsers.map((u) => (
               <Card key={u.uid} className="rounded-2xl border-border">
                 <CardContent className="flex items-center justify-between p-4">
                   <div>
@@ -272,7 +372,66 @@ export default function AdminHome() {
             ))}
           </>
         )}
+
+        {!admin.loading && tab === "inquiries" && (
+          <>
+            {admin.inquiries.length === 0 && <EmptyState label="문의가 없습니다." />}
+            {admin.inquiries.map((q) => (
+              <Card key={q.id} className="rounded-2xl border-border">
+                <CardContent className="space-y-2 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-foreground">{q.subject}</span>
+                    <Badge className={q.status === "answered" ? "bg-primary/10 text-primary" : "bg-warning/15 text-warning"}>
+                      {q.status === "answered" ? "답변완료" : "답변대기"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">from: {q.userId}</p>
+                  <p className="text-xs text-foreground">{q.message}</p>
+                  {q.adminReply && (
+                    <div className="rounded-xl bg-secondary p-3">
+                      <p className="text-[11px] font-semibold text-foreground">답변 완료</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{q.adminReply}</p>
+                    </div>
+                  )}
+                  {q.status === "open" && (
+                    <div className="space-y-2 pt-1">
+                      <Textarea
+                        value={replyDraft[q.id] ?? ""}
+                        onChange={(e) => setReplyDraft((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                        placeholder="답변을 입력하세요"
+                        rows={2}
+                        className="text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        className="w-full rounded-xl"
+                        disabled={!replyDraft[q.id]?.trim()}
+                        onClick={() => {
+                          admin.replyToInquiry(q.id, replyDraft[q.id]!.trim());
+                          setReplyDraft((prev) => ({ ...prev, [q.id]: "" }));
+                        }}
+                      >
+                        답변 등록
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
       </div>
+
+      <AdminSalonEditSheet salon={editingSalon} onOpenChange={(open) => !open && setEditingSalon(null)} />
+    </div>
+  );
+}
+
+function StatCard({ label, value, warn }: { label: string; value: string | number; warn?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 text-xl font-bold", warn ? "text-destructive" : "text-foreground")}>{value}</p>
     </div>
   );
 }

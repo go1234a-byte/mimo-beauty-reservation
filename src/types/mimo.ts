@@ -98,3 +98,15 @@ export interface MimoCoordinates {
   lat: number;
   lng: number;
 }
+
+export type MimoInquiryStatus = "open" | "answered";
+
+export interface MimoSupportInquiry {
+  id: string;
+  userId: string;
+  subject: string;
+  message: string;
+  status: MimoInquiryStatus;
+  adminReply: string | null;
+  createdAt: string;
+}

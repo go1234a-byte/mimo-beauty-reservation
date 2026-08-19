@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, Store, CalendarClock, Pencil, Clock, XCircle, LogOut } from "lucide-react";
+import { ArrowLeft, Store, CalendarClock, Pencil, Clock, XCircle, LogOut, PlusCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,19 @@ export default function MerchantHome() {
           <span className="text-lg font-bold tracking-tight text-foreground">MIMO 사장님</span>
         </header>
         <div className="space-y-3 px-6 pt-6">
+          <Link to="/merchant/register">
+            <Button className="h-12 w-full gap-1.5 rounded-xl text-sm font-semibold">
+              <PlusCircle className="h-4 w-4" />
+              새 매장 등록하기
+            </Button>
+          </Link>
+
+          <div className="flex items-center gap-2 pt-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[11px] text-muted-foreground">또는 등록 대기중인 매장 선택</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
           <h1 className="text-base font-bold text-foreground">등록할 매장을 선택해주세요</h1>
           <p className="text-xs text-muted-foreground">
             사업자등록증·통장사본·신분증 사본 제출과 세금계산서 발행 의무 동의가 필요해요. 제출 후 관리자

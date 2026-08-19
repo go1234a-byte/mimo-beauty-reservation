@@ -77,6 +77,19 @@ function mapReservationRow(row: MimoReservationRow): MimoReservation {
 
 const POLL_INTERVAL_MS = 12000;
 
+interface NewSalonInput {
+  name: string;
+  address: string;
+  phone: string | null;
+  lat: number;
+  lng: number;
+  categories: string[];
+  services: MimoService[];
+  businessRegUrl: string;
+  bankbookUrl: string;
+  idCardUrl: string;
+}
+
 interface MerchantDataContextValue {
   merchantUid: string | null;
   mySalons: MimoSalon[];
@@ -95,6 +108,7 @@ interface MerchantDataContextValue {
     salonId: string,
     docs: { businessRegUrl: string; bankbookUrl: string; idCardUrl: string },
   ) => Promise<boolean>;
+  registerNewSalon: (input: NewSalonInput) => Promise<string | null>;
   toggleSalonStatus: (salonId: string, next: boolean) => Promise<void>;
   completeReservation: (reservationId: string, salonId: string) => Promise<void>;
   updateSalonInfo: (salonId: string, patch: Partial<MimoSalon>) => Promise<boolean>;
@@ -202,6 +216,38 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     [merchantUid],
   );
 
+  // 기존 seed 매장을 가져가는 게 아니라 사장님이 완전히 새 매장을 등록하는 경로.
+  // 서류/세금계산서 요건은 클레임과 동일하고, 마찬가지로 pending으로 시작해 관리자 승인을 거친다.
+  const registerNewSalon = useCallback(
+    async (input: NewSalonInput): Promise<string | null> => {
+      if (!merchantUid) return null;
+      const id = crypto.randomUUID();
+      const { error } = await supabase.from("mimo_salons").insert({
+        id,
+        name: input.name,
+        address: input.address,
+        phone: input.phone,
+        lat: input.lat,
+        lng: input.lng,
+        status: true,
+        categories: input.categories,
+        photos: [],
+        services: input.services,
+        rating: 0,
+        owner_uid: merchantUid,
+        business_reg_url: input.businessRegUrl,
+        bankbook_url: input.bankbookUrl,
+        id_card_url: input.idCardUrl,
+        tax_invoice_agreed: true,
+        approval_status: "pending",
+      });
+      if (error) return null;
+      await fetchSalons();
+      return id;
+    },
+    [merchantUid, fetchSalons],
+  );
+
   // Priority 4 핵심: 사장님은 ON/OFF만 누르면 된다.
   const toggleSalonStatus = useCallback(
     async (salonId: string, next: boolean) => {
@@ -267,6 +313,7 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     signInEmail: signInWithEmail,
     logout,
     submitMerchantApplication,
+    registerNewSalon,
     toggleSalonStatus,
     completeReservation,
     updateSalonInfo,

@@ -19,6 +19,7 @@ const MerchantRootLayout = lazy(() =>
 const MerchantHome = lazy(() => import("./pages/merchant/MerchantHome"));
 const MerchantSalonEdit = lazy(() => import("./pages/merchant/MerchantSalonEdit"));
 const MerchantSalonApply = lazy(() => import("./pages/merchant/MerchantSalonApply"));
+const MerchantSalonRegister = lazy(() => import("./pages/merchant/MerchantSalonRegister"));
 
 const AdminRootLayout = lazy(() =>
   import("./components/admin/AdminRootLayout").then((m) => ({ default: m.AdminRootLayout })),
@@ -63,6 +64,7 @@ export const routers = [
       { index: true, element: withSuspense(<MerchantHome />) },
       { path: "edit", element: withSuspense(<MerchantSalonEdit />) },
       { path: "apply/:salonId", element: withSuspense(<MerchantSalonApply />) },
+      { path: "register", element: withSuspense(<MerchantSalonRegister />) },
     ],
   },
   {

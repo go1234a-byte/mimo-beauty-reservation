@@ -65,12 +65,13 @@ create table public.mimo_reservations (
 alter table public.mimo_users enable row level security;
 alter table public.mimo_salons enable row level security;
 alter table public.mimo_reservations enable row level security;
-create policy mimo_users_public_all on public.mimo_users for all using (true) with check (true);
-create policy mimo_salons_public_select on public.mimo_salons for select using (true);
-create policy mimo_salons_public_update on public.mimo_salons for update using (true) with check (true);
-create policy mimo_salons_public_delete on public.mimo_salons for delete using (true);
-create policy mimo_reservations_public_all on public.mimo_reservations for all using (true) with check (true);
 ```
+
+**RLS는 2026-08-18에 실제 Supabase Auth 기반으로 전면 재작성했습니다** (기존 완전 개방형
+`using (true)` 정책은 전부 제거). 조회(SELECT)는 비회원도 매장을 둘러볼 수 있도록 공개로 열어두고,
+쓰기는 `auth.uid()` 기준 소유자/관리자로 스코프를 좁혔습니다 — 매장은 `owner_uid = auth.uid()`인
+사람만, 프로필은 본인만, 관리자 액션(`mimo_users.is_admin = true`)은 `mimo_is_admin()` 함수로 판별.
+전체 정책은 Supabase 대시보드의 Database → Policies에서 확인하거나 마이그레이션 히스토리 참고.
 
 `mimo_notifications`/`mimo_reviews`/`mimo_reports` 테이블 및 관련 정책은 `MIMO_SCHEMA_MIGRATION.sql` 참고.
 
@@ -83,9 +84,23 @@ UPDATE/DELETE RLS 정책이 아예 없어서 사장님 ON/OFF, 결제확정 자�
 
 ## 배포
 
-`npm run build`로 생성되는 `dist/` 폴더를 Netlify, Vercel 등 정적 호스팅에 그대로 업로드하면 됩니다.
+**Live: https://mimo-beauty-reservation-v2.vercel.app**
+
+Vercel 프로젝트 `mimo-beauty-reservation-v2` (team `go1234a-7714s-projects`), CLI로 직접 배포합니다
+(`npx vercel deploy --prod --yes`). 이 저장소엔 `main`(옛 코드, 다른 백엔드)과 `mimo-full-featured`
+(이 브랜치) 두 개가 갈라져 있어서, GitHub 연동 자동배포는 **의도적으로 껐습니다** — `main`에 뭔가
+push되면 이 배포가 옛날 코드로 덮어써질 수 있기 때문입니다. 배포하려면 항상 로컬에서 CLI로 수동 실행.
+
+SPA라 `vercel.json`의 rewrite 규칙이 꼭 필요합니다 (없으면 `/mimo/bookings` 같은 딥링크/새로고침이
+전부 404). `npm run build`로 생성되는 `dist/`를 다른 정적 호스팅에 올릴 때도 동일한 rewrite/fallback
+설정이 필요합니다.
 
 ## 참고
 
-- 로그인(Apple/Google/Kakao)은 실제 OAuth 없이 클릭 시 즉시 임시 사용자로 로그인 처리되는 데모 시뮬레이션입니다.
-- 지도는 실제 지도 API 없이 CSS/SVG 목업 지도입니다.
+- 로그인은 이메일/비밀번호 기반 실제 Supabase Auth입니다 (소비자/사장님/관리자 공용 계정). Apple/Google/
+  카카오 소셜 로그인은 각 플랫폼 개발자 콘솔에서 앱 등록 + client ID/secret 발급이 필요해 아직 미구현.
+- 지도는 실제 Google Maps(`@vis.gl/react-google-maps`)입니다. `.env`에 `VITE_GOOGLE_MAPS_API_KEY`가
+  없으면 지도 자리에 "지도를 표시할 수 없어요" 안내만 뜨고 앱 자체는 정상 동작합니다(`MockMapView`는
+  더 이상 홈 화면에서 쓰지 않는 컴포넌트).
+- 예약 시작 30분 전 알림은 Edge Function(`send-reservation-reminders`) + pg_cron(5분 간격)으로 자동
+  발송됩니다.

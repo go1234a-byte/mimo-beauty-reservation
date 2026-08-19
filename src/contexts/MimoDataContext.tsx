@@ -3,95 +3,15 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { signUpWithEmail, signInWithEmail, signOutMimo, ensureMimoProfile } from "@/lib/mimoAuth";
 import { insertMimoNotification, mapNotificationRow } from "@/lib/mimoNotifications";
-import type {
-  MimoNotification,
-  MimoReservation,
-  MimoReservationStatus,
-  MimoSalon,
-  MimoSalonApprovalStatus,
-  MimoService,
-  MimoUser,
-} from "@/types/mimo";
-
-interface MimoSalonRow {
-  id: string;
-  name: string;
-  address: string;
-  phone?: string | null;
-  lat: number;
-  lng: number;
-  status: boolean;
-  categories: string[] | null;
-  photos: string[] | null;
-  services: unknown;
-  rating: number;
-  owner_uid?: string | null;
-  approval_status?: string | null;
-}
-
-interface MimoUserRow {
-  uid: string;
-  name: string;
-  phone: string | null;
-  favorites: string[] | null;
-  is_admin?: boolean | null;
-}
-
-interface MimoReservationRow {
-  reservation_id: string;
-  user_id: string;
-  salon_id: string;
-  service_name: string;
-  price: number;
-  start_time: string;
-  status: string;
-  payment_method: string | null;
-  payment_status: string;
-  created_at: string;
-}
-
-function mapSalonRow(row: MimoSalonRow): MimoSalon {
-  return {
-    id: row.id,
-    name: row.name,
-    address: row.address,
-    phone: row.phone ?? null,
-    lat: Number(row.lat),
-    lng: Number(row.lng),
-    status: row.status,
-    categories: row.categories ?? [],
-    photos: row.photos ?? [],
-    services: (row.services as MimoService[] | null) ?? [],
-    rating: Number(row.rating),
-    ownerUid: row.owner_uid ?? null,
-    approvalStatus: (row.approval_status as MimoSalonApprovalStatus | null) ?? "approved",
-  };
-}
-
-function mapUserRow(row: MimoUserRow): MimoUser {
-  return {
-    uid: row.uid,
-    name: row.name,
-    phone: row.phone,
-    favorites: row.favorites ?? [],
-    isAdmin: row.is_admin ?? false,
-  };
-}
-
-function mapReservationRow(row: MimoReservationRow): MimoReservation {
-  return {
-    reservationId: row.reservation_id,
-    userId: row.user_id,
-    salonId: row.salon_id,
-    serviceName: row.service_name,
-    price: Number(row.price),
-    startTime: row.start_time,
-    status: row.status as MimoReservationStatus,
-    paymentMethod: row.payment_method,
-    paymentStatus: row.payment_status,
-    createdAt: row.created_at,
-  };
-}
+import {
+  mapSalonRow,
+  mapUserRow,
+  mapReservationRow,
+  type MimoSalonRow,
+  type MimoUserRow,
+  type MimoReservationRow,
+} from "@/lib/mimoMappers";
+import type { MimoNotification, MimoReservation, MimoSalon, MimoUser } from "@/types/mimo";
 
 interface CreateReservationInput {
   salonId: string;

@@ -3,77 +3,9 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { signUpWithEmail, signInWithEmail, signOutMimo, ensureMimoProfile } from "@/lib/mimoAuth";
 import { insertMimoNotification } from "@/lib/mimoNotifications";
-import type { MimoReservation, MimoReservationStatus, MimoSalon, MimoService } from "@/types/mimo";
-
-interface MimoSalonRow {
-  id: string;
-  name: string;
-  address: string;
-  phone?: string | null;
-  lat: number;
-  lng: number;
-  status: boolean;
-  categories: string[] | null;
-  photos: string[] | null;
-  services: unknown;
-  rating: number;
-  owner_uid?: string | null;
-  approval_status?: string | null;
-  business_reg_url?: string | null;
-  bankbook_url?: string | null;
-  id_card_url?: string | null;
-  tax_invoice_agreed?: boolean | null;
-}
-
-interface MimoReservationRow {
-  reservation_id: string;
-  user_id: string;
-  salon_id: string;
-  service_name: string;
-  price: number;
-  start_time: string;
-  status: string;
-  payment_method: string | null;
-  payment_status: string;
-  created_at: string;
-}
-
-function mapSalonRow(row: MimoSalonRow): MimoSalon {
-  return {
-    id: row.id,
-    name: row.name,
-    address: row.address,
-    phone: row.phone ?? null,
-    lat: Number(row.lat),
-    lng: Number(row.lng),
-    status: row.status,
-    categories: row.categories ?? [],
-    photos: row.photos ?? [],
-    services: (row.services as MimoService[] | null) ?? [],
-    rating: Number(row.rating),
-    ownerUid: row.owner_uid ?? null,
-    approvalStatus: (row.approval_status as MimoSalon["approvalStatus"] | null) ?? "approved",
-    businessRegUrl: row.business_reg_url ?? null,
-    bankbookUrl: row.bankbook_url ?? null,
-    idCardUrl: row.id_card_url ?? null,
-    taxInvoiceAgreed: row.tax_invoice_agreed ?? false,
-  };
-}
-
-function mapReservationRow(row: MimoReservationRow): MimoReservation {
-  return {
-    reservationId: row.reservation_id,
-    userId: row.user_id,
-    salonId: row.salon_id,
-    serviceName: row.service_name,
-    price: Number(row.price),
-    startTime: row.start_time,
-    status: row.status as MimoReservationStatus,
-    paymentMethod: row.payment_method,
-    paymentStatus: row.payment_status,
-    createdAt: row.created_at,
-  };
-}
+import { mapSalonRow, mapReservationRow, type MimoSalonRow, type MimoReservationRow } from "@/lib/mimoMappers";
+import { fetchSalonReviews } from "@/lib/mimoReviews";
+import type { MimoReservation, MimoReview, MimoSalon, MimoService } from "@/types/mimo";
 
 const POLL_INTERVAL_MS = 12000;
 
@@ -95,6 +27,8 @@ interface MerchantDataContextValue {
   mySalons: MimoSalon[];
   claimableSalons: MimoSalon[];
   incomingReservations: MimoReservation[];
+  salonReservationHistory: MimoReservation[];
+  salonReviews: MimoReview[];
   loading: boolean;
   refresh: () => Promise<void>;
   signUpEmail: (
@@ -109,6 +43,10 @@ interface MerchantDataContextValue {
     docs: { businessRegUrl: string; bankbookUrl: string; idCardUrl: string },
   ) => Promise<boolean>;
   registerNewSalon: (input: NewSalonInput) => Promise<string | null>;
+  resubmitApplication: (
+    salonId: string,
+    docs: { businessRegUrl: string; bankbookUrl: string; idCardUrl: string },
+  ) => Promise<boolean>;
   toggleSalonStatus: (salonId: string, next: boolean) => Promise<void>;
   completeReservation: (reservationId: string, salonId: string) => Promise<void>;
   updateSalonInfo: (salonId: string, patch: Partial<MimoSalon>) => Promise<boolean>;
@@ -121,6 +59,8 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
   const merchantUid = session?.user?.id ?? null;
   const [allSalons, setAllSalons] = useState<MimoSalon[]>([]);
   const [incomingReservations, setIncomingReservations] = useState<MimoReservation[]>([]);
+  const [salonReservationHistory, setSalonReservationHistory] = useState<MimoReservation[]>([]);
+  const [salonReviews, setSalonReviews] = useState<MimoReview[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchSalons = useCallback(async () => {
@@ -149,6 +89,23 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // 예약 히스토리(완료/취소 포함 전체) — "들어온 예약"과 달리 매장 운영 현황/매출 확인용.
+  const fetchSalonReservationHistory = useCallback(async (salonIds: string[]) => {
+    if (salonIds.length === 0) {
+      setSalonReservationHistory([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("mimo_reservations")
+      .select("*")
+      .in("salon_id", salonIds)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (!error && data) {
+      setSalonReservationHistory(data.map((row) => mapReservationRow(row as MimoReservationRow)));
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     await fetchSalons();
   }, [fetchSalons]);
@@ -174,10 +131,15 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const salonIds = mySalons.map((s) => s.id);
     fetchIncomingReservations(salonIds);
-    const interval = setInterval(() => fetchIncomingReservations(salonIds), POLL_INTERVAL_MS);
+    fetchSalonReservationHistory(salonIds);
+    fetchSalonReviews(salonIds).then(setSalonReviews);
+    const interval = setInterval(() => {
+      fetchIncomingReservations(salonIds);
+      fetchSalonReservationHistory(salonIds);
+    }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mySalons.map((s) => s.id).join(","), fetchIncomingReservations]);
+  }, [mySalons.map((s) => s.id).join(","), fetchIncomingReservations, fetchSalonReservationHistory]);
 
   // 사업자등록증/통장사본/신분증 + 세금계산서 발행 동의를 전부 제출해야 매장을 가져갈 수 있다.
   // 제출 즉시 승인되는 게 아니라 approval_status를 pending으로 돌려 관리자 심사를 거치게 한다.
@@ -214,6 +176,42 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
       return true;
     },
     [merchantUid],
+  );
+
+  // 반려된 매장에 서류를 다시 올려 재심사를 요청한다 — 이미 본인 소유 매장이라 owner_uid는 그대로 두고
+  // 서류/승인상태/반려사유만 초기화.
+  const resubmitApplication = useCallback(
+    async (salonId: string, docs: { businessRegUrl: string; bankbookUrl: string; idCardUrl: string }) => {
+      const { error } = await supabase
+        .from("mimo_salons")
+        .update({
+          business_reg_url: docs.businessRegUrl,
+          bankbook_url: docs.bankbookUrl,
+          id_card_url: docs.idCardUrl,
+          tax_invoice_agreed: true,
+          approval_status: "pending",
+          rejection_reason: null,
+        })
+        .eq("id", salonId);
+      if (error) return false;
+      setAllSalons((prev) =>
+        prev.map((s) =>
+          s.id === salonId
+            ? {
+                ...s,
+                businessRegUrl: docs.businessRegUrl,
+                bankbookUrl: docs.bankbookUrl,
+                idCardUrl: docs.idCardUrl,
+                taxInvoiceAgreed: true,
+                approvalStatus: "pending",
+                rejectionReason: null,
+              }
+            : s,
+        ),
+      );
+      return true;
+    },
+    [],
   );
 
   // 기존 seed 매장을 가져가는 게 아니라 사장님이 완전히 새 매장을 등록하는 경로.
@@ -280,6 +278,9 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     if (resError) return;
 
     setIncomingReservations((prev) => prev.filter((r) => r.reservationId !== reservationId));
+    setSalonReservationHistory((prev) =>
+      prev.map((r) => (r.reservationId === reservationId ? { ...r, status: "completed" } : r)),
+    );
 
     const { error: statusError } = await supabase.from("mimo_salons").update({ status: true }).eq("id", salonId);
     if (!statusError) {
@@ -307,12 +308,15 @@ export function MerchantDataProvider({ children }: { children: ReactNode }) {
     mySalons,
     claimableSalons,
     incomingReservations,
+    salonReservationHistory,
+    salonReviews,
     loading,
     refresh,
     signUpEmail: signUpWithEmail,
     signInEmail: signInWithEmail,
     logout,
     submitMerchantApplication,
+    resubmitApplication,
     registerNewSalon,
     toggleSalonStatus,
     completeReservation,

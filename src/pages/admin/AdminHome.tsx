@@ -95,6 +95,7 @@ export default function AdminHome() {
   const [userQuery, setUserQuery] = useState("");
   const [editingSalon, setEditingSalon] = useState<MimoSalon | null>(null);
   const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
+  const [rejectDraft, setRejectDraft] = useState<Record<string, string>>({});
 
   const filteredSalons = useMemo(() => {
     const q = salonQuery.trim().toLowerCase();
@@ -266,6 +267,19 @@ export default function AdminHome() {
                       </Badge>
                     </div>
                   )}
+                  {s.approvalStatus === "rejected" && s.rejectionReason && (
+                    <p className="rounded-xl bg-destructive/10 p-2.5 text-xs text-destructive">
+                      반려 사유: {s.rejectionReason}
+                    </p>
+                  )}
+                  {s.approvalStatus === "pending" && (
+                    <Input
+                      value={rejectDraft[s.id] ?? ""}
+                      onChange={(e) => setRejectDraft((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                      placeholder="거절 시 사유 입력 (필수)"
+                      className="h-9 text-xs"
+                    />
+                  )}
                   <div className="flex gap-2 pt-1">
                     <Button size="sm" variant="outline" className="flex-1 rounded-xl" onClick={() => setEditingSalon(s)}>
                       <Pencil className="h-3.5 w-3.5" />
@@ -276,7 +290,16 @@ export default function AdminHome() {
                         <Button size="sm" className="flex-1 rounded-xl" onClick={() => admin.approveSalon(s.id)}>
                           승인
                         </Button>
-                        <Button size="sm" variant="outline" className="flex-1 rounded-xl" onClick={() => admin.rejectSalon(s.id)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 rounded-xl"
+                          disabled={!rejectDraft[s.id]?.trim()}
+                          onClick={() => {
+                            admin.rejectSalon(s.id, rejectDraft[s.id]!.trim());
+                            setRejectDraft((prev) => ({ ...prev, [s.id]: "" }));
+                          }}
+                        >
                           거절
                         </Button>
                       </>

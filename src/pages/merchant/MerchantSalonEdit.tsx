@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { uploadSalonPhoto } from "@/lib/mimoStorage";
 import type { MimoService } from "@/types/mimo";
 
 export default function MerchantSalonEdit() {
+  const { salonId } = useParams<{ salonId: string }>();
   const navigate = useNavigate();
   const { mySalons, updateSalonInfo } = useMerchantData();
-  const salon = mySalons[0];
+  const salon = mySalons.find((s) => s.id === salonId) ?? mySalons[0];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(salon?.name ?? "");

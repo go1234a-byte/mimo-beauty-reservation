@@ -24,6 +24,7 @@ export interface MimoSalon {
   bankbookUrl: string | null;
   idCardUrl: string | null;
   taxInvoiceAgreed: boolean;
+  rejectionReason: string | null;
 }
 
 export interface MimoUser {

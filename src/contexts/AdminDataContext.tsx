@@ -1,67 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { mapInquiryRow } from "@/lib/mimoInquiries";
-import type {
-  MimoReport,
-  MimoReservation,
-  MimoReservationStatus,
-  MimoReview,
-  MimoSalon,
-  MimoSalonApprovalStatus,
-  MimoService,
-  MimoSupportInquiry,
-  MimoUser,
-} from "@/types/mimo";
-
-interface MimoSalonRow {
-  id: string;
-  name: string;
-  address: string;
-  phone?: string | null;
-  lat: number;
-  lng: number;
-  status: boolean;
-  categories: string[] | null;
-  photos: string[] | null;
-  services: unknown;
-  rating: number;
-  owner_uid?: string | null;
-  approval_status?: string | null;
-  business_reg_url?: string | null;
-  bankbook_url?: string | null;
-  id_card_url?: string | null;
-  tax_invoice_agreed?: boolean | null;
-}
-
-interface MimoUserRow {
-  uid: string;
-  name: string;
-  phone: string | null;
-  favorites: string[] | null;
-  is_admin?: boolean | null;
-}
-
-interface MimoReservationRow {
-  reservation_id: string;
-  user_id: string;
-  salon_id: string;
-  service_name: string;
-  price: number;
-  start_time: string;
-  status: string;
-  payment_method: string | null;
-  payment_status: string;
-  created_at: string;
-}
-
-interface MimoReviewRow {
-  id: string;
-  salon_id: string;
-  user_id: string;
-  rating: number;
-  comment: string;
-  created_at: string;
-}
+import { mapSalonRow, mapUserRow, mapReservationRow, type MimoSalonRow, type MimoUserRow, type MimoReservationRow } from "@/lib/mimoMappers";
+import { mapReviewRow, type MimoReviewRow } from "@/lib/mimoReviews";
+import type { MimoReport, MimoReservation, MimoReview, MimoSalon, MimoSupportInquiry, MimoUser } from "@/types/mimo";
 
 interface MimoReportRow {
   id: string;
@@ -70,64 +12,6 @@ interface MimoReportRow {
   reason: string;
   status: string;
   created_at: string;
-}
-
-function mapSalonRow(row: MimoSalonRow): MimoSalon {
-  return {
-    id: row.id,
-    name: row.name,
-    address: row.address,
-    phone: row.phone ?? null,
-    lat: Number(row.lat),
-    lng: Number(row.lng),
-    status: row.status,
-    categories: row.categories ?? [],
-    photos: row.photos ?? [],
-    services: (row.services as MimoService[] | null) ?? [],
-    rating: Number(row.rating),
-    ownerUid: row.owner_uid ?? null,
-    approvalStatus: (row.approval_status as MimoSalonApprovalStatus | null) ?? "approved",
-    businessRegUrl: row.business_reg_url ?? null,
-    bankbookUrl: row.bankbook_url ?? null,
-    idCardUrl: row.id_card_url ?? null,
-    taxInvoiceAgreed: row.tax_invoice_agreed ?? false,
-  };
-}
-
-function mapUserRow(row: MimoUserRow): MimoUser {
-  return {
-    uid: row.uid,
-    name: row.name,
-    phone: row.phone,
-    favorites: row.favorites ?? [],
-    isAdmin: row.is_admin ?? false,
-  };
-}
-
-function mapReservationRow(row: MimoReservationRow): MimoReservation {
-  return {
-    reservationId: row.reservation_id,
-    userId: row.user_id,
-    salonId: row.salon_id,
-    serviceName: row.service_name,
-    price: Number(row.price),
-    startTime: row.start_time,
-    status: row.status as MimoReservationStatus,
-    paymentMethod: row.payment_method,
-    paymentStatus: row.payment_status,
-    createdAt: row.created_at,
-  };
-}
-
-function mapReviewRow(row: MimoReviewRow): MimoReview {
-  return {
-    id: row.id,
-    salonId: row.salon_id,
-    userId: row.user_id,
-    rating: Number(row.rating),
-    comment: row.comment,
-    createdAt: row.created_at,
-  };
 }
 
 function mapReportRow(row: MimoReportRow): MimoReport {
@@ -151,7 +35,7 @@ interface AdminDataContextValue {
   loading: boolean;
   refresh: () => Promise<void>;
   approveSalon: (salonId: string) => Promise<void>;
-  rejectSalon: (salonId: string) => Promise<void>;
+  rejectSalon: (salonId: string, reason: string) => Promise<void>;
   forceOffSalon: (salonId: string) => Promise<void>;
   deleteSalon: (salonId: string) => Promise<void>;
   updateSalonInfo: (salonId: string, patch: Partial<MimoSalon>) => Promise<boolean>;
@@ -207,14 +91,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     if (!error) setSalons((prev) => prev.map((s) => (s.id === salonId ? { ...s, approvalStatus: "approved" } : s)));
   }, []);
 
-  const rejectSalon = useCallback(async (salonId: string) => {
+  const rejectSalon = useCallback(async (salonId: string, reason: string) => {
     const { error } = await supabase
       .from("mimo_salons")
-      .update({ approval_status: "rejected", status: false })
+      .update({ approval_status: "rejected", status: false, rejection_reason: reason })
       .eq("id", salonId);
     if (!error)
       setSalons((prev) =>
-        prev.map((s) => (s.id === salonId ? { ...s, approvalStatus: "rejected", status: false } : s)),
+        prev.map((s) =>
+          s.id === salonId ? { ...s, approvalStatus: "rejected", status: false, rejectionReason: reason } : s,
+        ),
       );
   }, []);
 

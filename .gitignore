@@ -3,3 +3,5 @@ dist
 dist_final
 dist_prebuilt
 .env
+.vercel
+.env*
